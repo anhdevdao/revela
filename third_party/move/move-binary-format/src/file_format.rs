@@ -162,12 +162,36 @@ define_index! {
     doc: "Index into the `FunctionDefinition` table.",
 }
 
+// Since bytecode version 7
+define_index! {
+    name: StructVariantHandleIndex,
+    kind: StructVariantHandle,
+    doc: "Index into the `StructVariantHandle` table.",
+}
+define_index! {
+    name: StructVariantInstantiationIndex,
+    kind: StructVariantInstantiation,
+    doc: "Index into the `StructVariantInstantiation` table.",
+}
+define_index! {
+    name: VariantFieldHandleIndex,
+    kind: VariantFieldHandle,
+    doc: "Index into the `VariantFieldHandle` table.",
+}
+define_index! {
+    name: VariantFieldInstantiationIndex,
+    kind: VariantFieldInstantiation,
+    doc: "Index into the `VariantFieldInstantiation` table.",
+}
+
 /// Index of a local variable in a function.
 ///
 /// Bytecodes that operate on locals carry indexes to the locals of a function.
 pub type LocalIndex = u8;
 /// Max number of fields in a `StructDefinition`.
 pub type MemberCount = u16;
+/// Max number of variants in a `StructDefinition`, as well as index for variants.
+pub type VariantIndex = u16;
 /// Index into the code stream for a jump. The offset is relative to the beginning of
 /// the instruction stream.
 pub type CodeOffset = u16;
@@ -318,6 +342,37 @@ pub struct FieldHandle {
     pub field: MemberCount,
 }
 
+/// A variant field access info
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
+#[cfg_attr(
+    feature = "fuzzing",
+    derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary)
+)]
+pub struct VariantFieldHandle {
+    /// The structure which defines the variant.
+    pub struct_index: StructDefinitionIndex,
+    /// The sequence of variants which share the field at the given
+    /// field offset.
+    pub variants: Vec<VariantIndex>,
+    /// The field offset.
+    pub field: MemberCount,
+}
+
+/// A struct variant access info
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
+#[cfg_attr(
+    feature = "fuzzing",
+    derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary)
+)]
+pub struct StructVariantHandle {
+    pub struct_index: StructDefinitionIndex,
+    pub variant: VariantIndex,
+}
+
 // DEFINITIONS:
 // Definitions are the module code. So the set of types and functions in the module.
 
@@ -349,6 +404,19 @@ pub struct StructDefInstantiation {
     pub type_parameters: SignatureIndex,
 }
 
+/// A complete or partial instantiation of a generic struct variant
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
+#[cfg_attr(
+    feature = "fuzzing",
+    derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary)
+)]
+pub struct StructVariantInstantiation {
+    pub handle: StructVariantHandleIndex,
+    pub type_parameters: SignatureIndex,
+}
+
 /// A complete or partial instantiation of a function
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
@@ -371,6 +439,19 @@ pub struct FunctionInstantiation {
 #[cfg_attr(feature = "fuzzing", derive(arbitrary::Arbitrary))]
 pub struct FieldInstantiation {
     pub handle: FieldHandleIndex,
+    pub type_parameters: SignatureIndex,
+}
+
+/// A complete or partial instantiation of a variant field.
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
+#[cfg_attr(any(test, feature = "fuzzing"), proptest(no_params))]
+#[cfg_attr(
+    feature = "fuzzing",
+    derive(arbitrary::Arbitrary, dearbitrary::Dearbitrary)
+)]
+pub struct VariantFieldInstantiation {
+    pub handle: VariantFieldHandleIndex,
     pub type_parameters: SignatureIndex,
 }
 
@@ -2030,6 +2111,12 @@ pub struct CompiledModule {
     pub struct_defs: Vec<StructDefinition>,
     /// Function defined in this module.
     pub function_defs: Vec<FunctionDefinition>,
+
+    /// Since bytecode version 7: variant related handle tables
+    pub struct_variant_handles: Vec<StructVariantHandle>,
+    pub struct_variant_instantiations: Vec<StructVariantInstantiation>,
+    pub variant_field_handles: Vec<VariantFieldHandle>,
+    pub variant_field_instantiations: Vec<VariantFieldInstantiation>,
 }
 
 // Need a custom implementation of Arbitrary because as of proptest-derive 0.1.1, the derivation
@@ -2140,6 +2227,10 @@ impl Arbitrary for CompiledModule {
                         metadata: vec![],
                         struct_defs,
                         function_defs,
+                        struct_variant_handles: vec![],
+                        struct_variant_instantiations: vec![],
+                        variant_field_handles: vec![],
+                        variant_field_instantiations: vec![],
                     }
                 },
             )
@@ -2155,6 +2246,7 @@ impl CompiledModule {
             IndexKind::LocalPool
                 | IndexKind::CodeDefinition
                 | IndexKind::FieldDefinition
+                | IndexKind::VariantDefinition
                 | IndexKind::TypeParameter
                 | IndexKind::MemberCount
         ));
@@ -2173,10 +2265,17 @@ impl CompiledModule {
             IndexKind::Identifier => self.identifiers.len(),
             IndexKind::AddressIdentifier => self.address_identifiers.len(),
             IndexKind::ConstantPool => self.constant_pool.len(),
+            // Since bytecode version 7
+            IndexKind::VariantFieldHandle => self.variant_field_handles.len(),
+            IndexKind::VariantFieldInstantiation => self.variant_field_instantiations.len(),
+            IndexKind::StructVariantHandle => self.struct_variant_handles.len(),
+            IndexKind::StructVariantInstantiation => self.struct_variant_instantiations.len(),
+
             // XXX these two don't seem to belong here
             other @ IndexKind::LocalPool
             | other @ IndexKind::CodeDefinition
             | other @ IndexKind::FieldDefinition
+            | other @ IndexKind::VariantDefinition
             | other @ IndexKind::TypeParameter
             | other @ IndexKind::MemberCount => unreachable!("invalid kind for count: {:?}", other),
         }
@@ -2219,6 +2318,10 @@ pub fn empty_module() -> CompiledModule {
         function_instantiations: vec![],
         field_instantiations: vec![],
         signatures: vec![Signature(vec![])],
+        struct_variant_handles: vec![],
+        struct_variant_instantiations: vec![],
+        variant_field_handles: vec![],
+        variant_field_instantiations: vec![],
     }
 }
 

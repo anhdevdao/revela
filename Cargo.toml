@@ -520,6 +520,7 @@ enum_dispatch = "0.3.12"
 env_logger = "0.10.0"
 erased-serde = "0.3.13"
 event-listener = "2.5.3"
+dearbitrary = { version = "1.0.4", features = ["derive"] }
 fail = "0.5.0"
 ff = "0.13"
 field_count = "0.1.1"

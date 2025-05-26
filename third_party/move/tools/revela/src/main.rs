@@ -15,7 +15,11 @@ use move_binary_format::{
 use revela::decompiler::{Decompiler, OptimizerSettings};
 #[derive(Debug, Parser)]
 #[clap(setting = AppSettings::ArgRequiredElseHelp)]
-#[clap(version, about = "Decompile Move bytecode back to source code. By verichains.io", name = "revela")]
+#[clap(
+    version,
+    about = "Decompile Move bytecode back to source code. By verichains.io",
+    name = "revela"
+)]
 struct Args {
     /// Treat input file as a script (default is to treat file as a module)
     #[clap(short = 's', long = "script")]
@@ -44,9 +48,12 @@ fn main() {
         .files
         .iter()
         .map(|file| {
-            let bytecode_bytes = fs::read(file).unwrap_or_else(|err| {
+            // anhdevdao: Update the reading of the file to read the hex string and then decode it
+            let contents = fs::read_to_string(file).unwrap_or_else(|err| {
                 panic!("Error: failed to read file {}: {}", file.to_string(), err);
             });
+            let trimmed = contents.trim().trim_start_matches("0x");
+            let bytecode_bytes = hex::decode(trimmed).expect("Error: failed to decode hex");
 
             if args.is_script {
                 CompiledBinary::Script(CompiledScript::deserialize(&bytecode_bytes).unwrap_or_else(

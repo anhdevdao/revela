@@ -8,19 +8,17 @@ use move_binary_format::{
     access::ModuleAccess,
     binary_views::BinaryIndexedView,
     file_format::{
-        self_module_name, AddressIdentifierIndex, CompiledScript,
-        FunctionDefinition, FunctionHandle, FunctionHandleIndex,
-        IdentifierIndex, ModuleHandle, ModuleHandleIndex, Signature,
-        SignatureIndex, SignatureToken, StructHandleIndex, Visibility,
+        self_module_name, AddressIdentifierIndex, CompiledScript, FunctionDefinition,
+        FunctionHandle, FunctionHandleIndex, IdentifierIndex, ModuleHandle, ModuleHandleIndex,
+        Signature, SignatureIndex, SignatureToken, StructHandleIndex, Visibility,
     },
     CompiledModule,
 };
 use move_command_line_common::files::FileHash;
 use move_compiler::{
     expansion::ast::{
-        AbilitySet, Address, Attributes, Function, FunctionBody_,
-        FunctionSignature, ModuleAccess_, ModuleDefinition, ModuleIdent,
-        ModuleIdent_, Program, StructDefinition, StructFields,
+        AbilitySet, Address, Attributes, Function, FunctionBody_, FunctionSignature, ModuleAccess_,
+        ModuleDefinition, ModuleIdent, ModuleIdent_, Program, StructDefinition, StructFields,
         StructTypeParameter, Type, Type_,
     },
     parser::ast::{Field, FunctionName, ModuleName, StructName},
@@ -225,11 +223,9 @@ fn map_struct(
                 let name = Field(span_(name));
 
                 let mapped_type: Type = map_type(compiled_module, &field.signature.0, naming)?;
-                result
-                    .add(name, (idx, mapped_type))
-                    .map_err(|(name, _)| {
-                        anyhow::Error::msg(format!("Error adding field {}", name))
-                    })?;
+                result.add(name, (idx, mapped_type)).map_err(|(name, _)| {
+                    anyhow::Error::msg(format!("Error adding field {}", name))
+                })?;
             }
             StructFields::Defined(result)
         }
@@ -333,7 +329,7 @@ fn map_function(
         acquires,
         body: span_(body),
         specs: BTreeMap::new(),
-        access_specifiers: Default::default()
+        access_specifiers: Default::default(),
     })
 }
 
@@ -427,7 +423,7 @@ pub fn script_into_module(compiled_script: CompiledScript) -> CompiledModule {
         parameters: script.parameters,
         return_: return_sig_idx,
         type_parameters: script.type_parameters,
-        access_specifiers: Default::default()
+        access_specifiers: Default::default(),
     });
 
     // Create a function definition for the main function.
@@ -461,6 +457,11 @@ pub fn script_into_module(compiled_script: CompiledScript) -> CompiledModule {
 
         struct_defs: vec![],
         function_defs: vec![main_def],
+
+        struct_variant_handles: vec![],
+        struct_variant_instantiations: vec![],
+        variant_field_handles: vec![],
+        variant_field_instantiations: vec![],
     };
 
     move_binary_format::check_bounds::BoundsChecker::verify_module(&module)
@@ -601,10 +602,9 @@ fn create_dummy_for_non_existing_modules(
 
     for (&module_id, module) in &dummy_modules {
         // special case: we are decompiling the vector module from stdlib
-        if module_id.value.module.0.value.as_str() == "vector" &&
-            modules.contains_key(&module_id) {
-                continue;
-            }
+        if module_id.value.module.0.value.as_str() == "vector" && modules.contains_key(&module_id) {
+            continue;
+        }
 
         let functions = UniqueMap::<FunctionName, Function>::maybe_from_iter(
             module.functions.iter().map(|fname| {
@@ -624,7 +624,7 @@ fn create_dummy_for_non_existing_modules(
                         acquires: Vec::new(),
                         body: span_(FunctionBody_::Native),
                         specs: BTreeMap::new(),
-                        access_specifiers: Default::default()
+                        access_specifiers: Default::default(),
                     },
                 )
             }),
@@ -699,8 +699,9 @@ pub(crate) fn create_program(
     let adding_modules: Vec<_> = binaries
         .into_iter()
         .map(|binary| match binary {
-            BinaryIndexedView::Script(compiled_script) =>
-                script_into_module((*compiled_script).clone()),
+            BinaryIndexedView::Script(compiled_script) => {
+                script_into_module((*compiled_script).clone())
+            }
             BinaryIndexedView::Module(compiled_module) => (*compiled_module).clone(),
         })
         .collect();
@@ -720,9 +721,7 @@ pub(crate) fn create_program(
                     StructName(name),
                     map_struct(compiled_module, struct_, naming)?,
                 )
-                .map_err(|(name, _)| {
-                    anyhow::Error::msg(format!("Error adding struct {}", name))
-                })?;
+                .map_err(|(name, _)| anyhow::Error::msg(format!("Error adding struct {}", name)))?;
         }
 
         for function_ in compiled_module.function_defs() {

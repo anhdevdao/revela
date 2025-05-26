@@ -770,13 +770,11 @@ fn serialize_access_specifier(binary: &mut BinaryData, acc: &AccessSpecifier) ->
         AccessKind::Writes => SerializedAccessKind::WRITE,
         AccessKind::Acquires => SerializedAccessKind::ACQUIRES,
     } as u8)?;
-    binary.push(
-        if acc.negated {
-            SerializedBool::TRUE as u8
-        } else {
-            SerializedBool::FALSE as u8
-        },
-    )?;
+    binary.push(if acc.negated {
+        SerializedBool::TRUE as u8
+    } else {
+        SerializedBool::FALSE as u8
+    })?;
     serialize_resource_specifier(binary, &acc.resource)?;
     serialize_address_specifier(binary, &acc.address)
 }
@@ -1401,7 +1399,7 @@ impl ModuleSerializer {
         )?;
         serialize_table_index(
             binary,
-            TableType::FIELD_HANDLE,
+            TableType::FIELD_HANDLES,
             self.field_handles.0,
             self.field_handles.1,
         )?;
