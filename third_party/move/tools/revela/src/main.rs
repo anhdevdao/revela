@@ -86,5 +86,7 @@ fn main() {
         },
     );
     let output = decompiler.decompile().expect("Error: unable to decompile");
-    println!("{}", output);
+    // store the output to a .move file
+    let output_file = format!("{}.move", args.files[0].split(".").next().unwrap());
+    fs::write(output_file, output).expect("Error: failed to write output file");
 }
